@@ -2,6 +2,7 @@
 import argparse
 import collections
 import glob
+import json
 import os
 import pickle
 import re
@@ -239,7 +240,9 @@ def Query(estimators,
 
     # Actual.
     card = oracle_est.Query(cols, ops,
-                            vals) if oracle_card is None else oracle_card
+                            vals)
+    if oracle_card != card:
+        print('Warning: oracle_card {} != actual {}'.format(oracle_card, card))
     if card == 0:
         return
 
@@ -270,6 +273,21 @@ def ReportEsts(estimators):
     return v
 
 
+def load_queries(table):
+    
+    with open('/home/user1/QOlab/vdvae/power/workload.json', 'r', encoding='utf-8') as f:
+        data_list = json.load(f)
+    
+    result = []
+    for data in data_list:
+        data_tuple = ([table.columns[table.ColumnIndex(data['cols'][i])] for i in range(len(data['cols'])) if data['ops'][i] is not None], 
+                      [data['ops'][i] for i in range(len(data['cols'])) if data['ops'][i] is not None], 
+                      [data['vals'][i] for i in range(len(data['cols'])) if data['ops'][i] is not None])
+        card = data['card']
+        result.append((data_tuple, card))
+    return result
+
+
 def RunN(table,
          cols,
          estimators,
@@ -281,6 +299,8 @@ def RunN(table,
          oracle_est=None):
     if rng is None:
         rng = np.random.RandomState(1234)
+        
+    queries = load_queries(table)
 
     last_time = None
     for i in range(num):
@@ -292,16 +312,16 @@ def RunN(table,
             do_print = True
             print('Query {}:'.format(i), end=' ')
             last_time = time.time()
-        query = GenerateQuery(cols, rng, table)
+        query, card = queries[i]
         Query(estimators,
               do_print,
-              oracle_card=oracle_cards[i]
-              if oracle_cards is not None and i < len(oracle_cards) else None,
+              oracle_card=card,
               query=query,
               table=table,
               oracle_est=oracle_est)
 
         max_err = ReportEsts(estimators)
+        
     return False
 
 
@@ -556,6 +576,7 @@ def Main():
                                   num_filters=None,
                                   oracle_cards=oracle_cards)
     else:
+        import estimators_jacobi as estimators_lib
         estimators = [
             estimators_lib.ProgressiveSampling(c.loaded_model,
                                                table,

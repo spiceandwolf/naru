@@ -17,12 +17,18 @@ import common
 import made
 import transformer
 
+def in_between(data, val) -> bool:
+    assert len(val) == 2
+    lrange, rrange = val
+    return np.greater_equal(data, lrange) & np.less_equal(data, rrange)
+
 OPS = {
     '>': np.greater,
     '<': np.less,
     '>=': np.greater_equal,
     '<=': np.less_equal,
-    '=': np.equal
+    '=': np.equal,
+    '[]': in_between
 }
 
 
@@ -155,7 +161,7 @@ class ProgressiveSampling(CardEst):
             self.num_samples = None
         else:
             self.num_samples = r
-
+        # self.num_samples = 1
         self.seed = seed
         self.device = device
 
@@ -264,15 +270,15 @@ class ProgressiveSampling(CardEst):
             if not self.shortcircuit or operators[natural_idx] is not None:
                 probs_i = torch.softmax(
                     self.model.logits_for_col(natural_idx, logits), 1)
-
+                # print(f'{columns[natural_idx]} probs_i : {probs_i.shape}')
                 valid_i = valid_i_list[i]
                 if valid_i is not None:
                     probs_i *= valid_i
-
+                    # print(f'{columns[natural_idx]} valid_i : {valid_i.shape}')
                 probs_i_summed = probs_i.sum(1)
-
+                # print(f'{columns[natural_idx]} probs_i_summed : {probs_i_summed.shape}')
                 masked_probs.append(probs_i_summed)
-
+                print(f'{columns[natural_idx]} probs_i_summed : {probs_i_summed}')
                 # If some paths have vanished (~0 prob), assign some nonzero
                 # mass to the whole row so that multinomial() doesn't complain.
                 paths_vanished = (probs_i_summed <= 0).view(-1, 1)
@@ -293,7 +299,7 @@ class ProgressiveSampling(CardEst):
                         probs_i, num_samples=num_i,
                         replacement=True)  # [bs, num_i]
                     data_to_encode = samples_i.view(-1, 1)
-
+                
                 # Encode input: i.e., put sampled vars into input buffer.
                 if data_to_encode is not None:  # Wildcards are encoded already.
                     if not isinstance(self.model, transformer.Transformer):
@@ -382,6 +388,7 @@ class ProgressiveSampling(CardEst):
             orderings = [ordering]
 
         num_orderings = len(orderings)
+        # print('Ordering: {}'.format(ordering))
 
         # order idx (first/second/... to be sample) -> x_{natural_idx}.
         inv_ordering = [None] * len(columns)

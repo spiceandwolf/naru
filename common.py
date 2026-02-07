@@ -182,6 +182,11 @@ class CsvTable(Table):
         self.columns = self._build_columns(self.data, cols, type_casts, pg_cols)
 
         super(CsvTable, self).__init__(name, self.columns, pg_name)
+        
+        # for col in self.columns:
+        #     print(f'Column {col.name}')
+        #     print(f'all_distinct_values {col.all_distinct_values}')
+        #     print(f'distribution_size {col.distribution_size}')
 
     def _load(self, filename, cols, **kwargs):
         print('Loading csv...', end=' ')

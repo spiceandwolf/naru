@@ -489,21 +489,39 @@ class MADE(nn.Module):
                         y_embed.append(y_onehot)
             return torch.cat(y_embed, 1)
 
-    def ToOneHot(self, data):
+    def ToOneHot(self, data, natural_col=None, out=None):
         assert not self.column_masking, 'not implemented'
         bs = data.size()[0]
         y_onehots = []
         data = data.long()
-        for i, coli_dom_size in enumerate(self.input_bins):
+        
+        if natural_col is None:
+            # Train path.
+            
+            for i, coli_dom_size in enumerate(self.input_bins):
+                if coli_dom_size <= 2:
+                    y_onehots.append(data[:, i].view(-1, 1).float())
+                else:
+                    y_onehot = torch.zeros(bs, coli_dom_size, device=data.device)
+                    y_onehot.scatter_(1, data[:, i].view(-1, 1), 1)
+                    y_onehots.append(y_onehot)
+
+            # [bs, sum(dist size)]
+            return torch.cat(y_onehots, 1)
+        
+        else:
+            # Inference path.
+            
+            natural_idx = natural_col
+            coli_dom_size = self.input_bins[natural_idx]
             if coli_dom_size <= 2:
-                y_onehots.append(data[:, i].view(-1, 1).float())
+                y_onehots.append(data.view(-1, 1).float())
             else:
                 y_onehot = torch.zeros(bs, coli_dom_size, device=data.device)
-                y_onehot.scatter_(1, data[:, i].view(-1, 1), 1)
-                y_onehots.append(y_onehot)
-
-        # [bs, sum(dist size)]
-        return torch.cat(y_onehots, 1)
+                y_onehot.scatter_(1, data.view(-1, 1), 1)
+                out.copy_(y_onehot)
+            
+            return out
 
     def ToBinaryAsOneHot(self, data, threshold=0, natural_col=None, out=None):
         if data is None:
@@ -607,7 +625,7 @@ class MADE(nn.Module):
         elif self.input_encoding is None:
             return data
         elif self.input_encoding == 'one_hot':
-            return self.ToOneHot(data)
+            return self.ToOneHot(data, natural_col=natural_col, out=out)
         else:
             assert False, self.input_encoding
 
@@ -687,8 +705,11 @@ class MADE(nn.Module):
         if data.dtype != torch.long:
             data = data.long()
         nll = torch.zeros(logits.size()[0], device=logits.device)
+        # print(f'data {data.shape}')
         for i in range(self.nin):
             logits_i = self.logits_for_col(i, logits)
+            # print(f'logits_i {logits_i[0, :]} {logits_i[0, :].shape}')
+            # print(f'data {data[0, i]} {data[0, i].shape}')
             nll += F.cross_entropy(logits_i, data[:, i], reduction='none')
 
         return nll
